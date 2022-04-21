@@ -11,7 +11,7 @@ class FieldElement:
 		self.prime = prime
 
 	def __repr__(self):
-		return 'FieldElement_{}({})'.format(self.prime, self.num)
+		return 'FFE_{}({})'.format(self.prime, self.num)
 
 	def _assert_same_field(self, other):
 		if self.prime != other.prime:
@@ -54,13 +54,16 @@ class FieldElement:
 class ECPoint:
 
 	def __init__(self, x, y, a, b):
-		if self.x is not None and self.y is not None:
-			if y**2 != x**2 + a * x + b:
+		if x is not None and y is not None:
+			if y**2 != x**3 + a * x + b:
 				raise ValueError("({}, {}) is not on the elliptic curve".format(x, y))
 		self.a = a
 		self.b = b
 		self.x = x
 		self.y = y
+
+	def __repr__(self):
+		return "Point ({}, {}) on elliptic curve a={}, b={}".format(self.x, self.y, self.a, self.b)
 
 	def _assert_same_curve(self, other):
 		if self.a != other.a or self.b != other.b:
@@ -138,7 +141,53 @@ class FFETests(unittest.TestCase):
 class ECPTests(unittest.TestCase):
 
 	def testcreate(self):
-		pass
+		p1 = ECPoint(-1, -1, 5, 7)
+		p2 = ECPoint(18, 77, 5, 7)
+		self.assertTrue(p1 == p1)
+		self.assertFalse(p1 == p2)
+		self.assertTrue(p1 != p2)
+
+	def testadd(self):
+		p1 = ECPoint(-1, -1, 5, 7)
+		p2 = ECPoint(-1, 1, 5, 7)
+		p3 = ECPoint(2, 5, 5, 7)
+		p4 = ECPoint(3, -7, 5, 7)
+		p5 = ECPoint(18, 77, 5, 7)
+		inf = ECPoint(None, None, 5, 7)
+		self.assertTrue(p1 == p1 + inf)
+		self.assertTrue(inf + p2 == p2)
+		self.assertTrue(p1 + p2 == inf)
+		self.assertTrue(p4 == p1 + p3)
+		self.assertTrue(p1 + p1 == p5)
+
+
+class ECoFFTests(unittest.TestCase):
+
+	def testcreate(self):
+		prime = 223
+		a = FieldElement(0, prime)
+		b = FieldElement(7, prime)
+		valid_points = ((192, 105), (17, 56), (1, 193))
+		invalid_points = ((200, 119), (42, 99))
+		for x, y in valid_points:
+			ECPoint(FieldElement(x, prime), FieldElement(y, prime), a, b)
+		for x, y in invalid_points:
+			with self.assertRaises(ValueError):
+				ECPoint(FieldElement(x, prime), FieldElement(y, prime), a, b)
+
+	def testadd(self):
+		prime = 223
+		a = FieldElement(0, prime)
+		b = FieldElement(7, prime)
+		addition_triplets = (((192, 105), (17, 56), (170, 142)),
+							 ((170, 142), (60, 139), (220, 181)),
+							 ((47, 71), (17, 56), (215, 68)),
+							 ((143, 98), (76, 66), (47, 71)),)
+		for (x1, y1), (x2, y2), (x3, y3) in addition_triplets:
+			p1 = ECPoint(FieldElement(x1, prime), FieldElement(y1, prime), a, b)
+			p2 = ECPoint(FieldElement(x2, prime), FieldElement(y2, prime), a, b)
+			p3 = ECPoint(FieldElement(x3, prime), FieldElement(y3, prime), a, b)
+			self.assertTrue(p1 + p2 == p3)
 
 
 if __name__ == '__main__':
