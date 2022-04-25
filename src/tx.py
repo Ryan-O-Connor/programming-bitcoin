@@ -47,7 +47,6 @@ class Tx:
             serialization += tx_out.serialize()
         serialization += int_to_little_endian(self.locktime)
 
-
     @classmethod
     def parse(cls, stream):
         version = little_endian_to_int(stream.read(4))
