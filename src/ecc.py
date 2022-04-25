@@ -253,6 +253,27 @@ class Signiture:
         # Encode length of result and prepend
         return b'\x30' + len(result).to_bytes(1, 'big') + result
 
+    @classmethod
+    def parse(cls, der_bin):
+        # Parse binary DER format into signiture
+        start_byte = der_bin[0]
+        if start_byte != b'\x30':
+            raise SyntaxError("Bad signiture: Invalid start byte {}".format(start_byte))
+        total_length = der_bin[1]
+        if total_length != len(der_bin[2:]):
+            raise SyntaxError("Bad signiture: Invalid total length {}".format(total_length))
+        marker = der_bin[2]
+        if marker != b'\x02':
+            raise SyntaxError("Bad signiture: Invalid marker {}".format(marker))
+        r_length = der_bin[3]
+        r = int.from_bytes(der_bin[4:4+r_length], 'big')
+        next_marker_index = 4 + r_length
+        marker = der_bin[next_marker_index]
+        if marker != b'\x02':
+            raise SyntaxError("Bad signiture: Invalid marker {}".format(marker))
+        s_length = der_bin[next_marker_index + 1]
+        s = int.from_bytes(der_bin[next_marker_index + 2:next_marker_index + 2 + s_length], 'big')
+        return cls(r, s)
 
 class PrivateKey:
 
