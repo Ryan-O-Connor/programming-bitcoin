@@ -9,6 +9,15 @@ T_ELEMENT = 0
 T_OP_CODE = 1
 
 
+OP_NAMES = {0: "OP_0",
+            81: "OP_1",
+            118: "OP_DUP",
+            136: "OP_EQUALVERIFY",
+            169: "OP_HASH160",
+            170: "OP_HASH256",
+            172: "OP_CHECKSIG"}
+
+
 class Interpreter:
 
     def __init__(self):
@@ -83,7 +92,7 @@ class Token:
         if self.type == T_ELEMENT:
             return "Element token: {}".format(self.value.hex())
         else:
-            return "Op code token: {}".format(self.value)
+            return "Op code token: {}".format(OP_NAMES[self.value])
 
     def getValue(self):
         return self.value
@@ -93,10 +102,10 @@ class Token:
 
     def serialize(self):
         if self.type == T_ELEMENT:
-            serialization = int_to_little_endian(len(self.value))
+            serialization = int_to_little_endian(len(self.value), 1)
             serialization += self.value
         else:
-            serialization = int_to_little_endian(self.value)
+            serialization = int_to_little_endian(self.value, 1)
         return serialization
 
 
@@ -152,12 +161,24 @@ class Script:
 
 class ScriptTests(unittest.TestCase):
 
-    def testScriptSig(self):
-        pass
+    def test_parse(self):
+        script_hex = '6a47304402207899531a52d59a6de200179928ca900254a36b8dff8bb75f5f5d71b1cdc26125022008b422690b8461cb52c3cc30330b23d574351872b7c361e9aae3649071c1a7160121035d5c93d9ac96881f19ba1f686f15f009ded7c62efe85a872e6a19b43c15a2937'
+        stream = BytesIO(bytes.fromhex(script_hex))
+        script_sig = Script.parse(stream)
+        expected_sig = bytes.fromhex('304402207899531a52d59a6de200179928ca900254a36b8dff8bb75f5f5d71b1cdc26125022008b422690b8461cb52c3cc30330b23d574351872b7c361e9aae3649071c1a71601')
+        self.assertTrue(expected_sig == script_sig.tokens[0].value)
+        expected_key = bytes.fromhex('035d5c93d9ac96881f19ba1f686f15f009ded7c62efe85a872e6a19b43c15a2937')
+        self.assertTrue(expected_key == script_sig.tokens[1].value)
 
+    def test_serialize(self):
+        script_hex = '6a47304402207899531a52d59a6de200179928ca900254a36b8dff8bb75f5f5d71b1cdc26125022008b422690b8461cb52c3cc30330b23d574351872b7c361e9aae3649071c1a7160121035d5c93d9ac96881f19ba1f686f15f009ded7c62efe85a872e6a19b43c15a2937'
+        script_pubkey = BytesIO(bytes.fromhex(script_hex))
+        script = Script.parse(script_pubkey)
+        self.assertTrue(script.serialize().hex() == script_hex)
 
 if __name__ == '__main__':
-    script_hex = "6a47304402207899531a52d59a6de200179928ca900254a36b8dff8bb75f5f5d71b1cdc26125022008b422690b8461cb52c3cc30330b23d574351872b7c361e9aae3649071c1a7160121035d5c93d9ac96881f19ba1f686f15f009ded7c62efe85a872e6a19b43c15a2937"
+    # unittest.main()
+    script_hex = '6b483045022100ed81ff192e75a3fd2304004dcadb746fa5e24c5031ccfcf21320b0277457c98f02207a986d955c6e0cb35d446a89d3f56100f4d7f67801c31967743a9c8e10615bed01210349fc4e631e3624a545de3f89f5d8684c7b8138bd94bdd531d2e213bf016b278a'
     stream = BytesIO(bytes.fromhex(script_hex))
     script_sig = Script.parse(stream)
     print(script_sig)
