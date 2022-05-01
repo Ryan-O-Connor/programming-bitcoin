@@ -20,7 +20,8 @@ OP_NAMES = {0: "OP_0",
 
 class Interpreter:
 
-    def __init__(self):
+    def __init__(self, script):
+        self.script = script
         self.stack = []
         self.altstack = []
 
@@ -28,8 +29,8 @@ class Interpreter:
         if len(self.stack) < length:
             raise RuntimeError("Invalid stack length: {}".format(length))
 
-    def evaluate(self, script, message_hash):
-        for token in script:
+    def evaluate(self, message_hash):
+        for token in self.script:
             if token.getType() == T_ELEMENT:
                 self.stack.append(token.getValue())
             else:
@@ -65,13 +66,14 @@ class Interpreter:
                             self.stack.append(hash256(top_element))
                         case 172:
                             # OP_CHECKSIG
+                            # Last byte of signiture is SIGHASH, which is removed
                             self.assert_stack_length(2)
                             pubkey = secp256k1Point.parse(self.stack.pop())
-                            sig = Signiture.parse(self.stack.pop())
+                            sig = Signiture.parse(self.stack.pop()[:-1])
                             if pubkey.verify(message_hash, sig):
-                                self.stack.append(b'')
-                            else:
                                 self.stack.append(b'\x01')
+                            else:
+                                self.stack.append(b'')
                 except RuntimeError:
                     print("Invalid transaction")
                     return False
@@ -139,8 +141,9 @@ class Script:
         return encode_varint(len(serialization)) + serialization
 
     @classmethod
-    def parse(cls, stream):
-        byte_length = read_varint(stream)
+    def parse(cls, stream, byte_length=None):
+        if byte_length is None:
+            byte_length = read_varint(stream)
         tokens = []
         byte_count = 0
         while byte_count < byte_length:
