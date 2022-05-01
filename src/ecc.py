@@ -196,7 +196,7 @@ class secp256k1Point(ECPoint):
         # Parse binary SEC format into public key
         prefix = sec_bin[0]
         x = int.from_bytes(sec_bin[1:33], 'big')
-        if prefix == '\x04':
+        if prefix == 0x04:
             # Uncompressed SEC format
             y = int.from_bytes(sec_bin[33:65], 'big')
         else:
@@ -210,9 +210,9 @@ class secp256k1Point(ECPoint):
             else:
                 even_root = secp256k1FieldElement(secp256k1_PRIME - w.num)
                 odd_root = w
-            if prefix == b'\x02':
+            if prefix == 0x02:
                 y = even_root
-            elif prefix == b'\x03':
+            elif prefix == 0x03:
                 y = odd_root
             else:
                 raise SyntaxError("Invalid SEC prefix {}".format(prefix))
@@ -257,19 +257,19 @@ class Signiture:
     def parse(cls, der_bin):
         # Parse binary DER format into signiture
         start_byte = der_bin[0]
-        if start_byte != b'\x30':
+        if start_byte != 0x30:
             raise SyntaxError("Bad signiture: Invalid start byte {}".format(start_byte))
         total_length = der_bin[1]
         if total_length != len(der_bin[2:]):
             raise SyntaxError("Bad signiture: Invalid total length {}".format(total_length))
         marker = der_bin[2]
-        if marker != b'\x02':
+        if marker != 0x02:
             raise SyntaxError("Bad signiture: Invalid marker {}".format(marker))
         r_length = der_bin[3]
         r = int.from_bytes(der_bin[4:4+r_length], 'big')
         next_marker_index = 4 + r_length
         marker = der_bin[next_marker_index]
-        if marker != b'\x02':
+        if marker != 0x02:
             raise SyntaxError("Bad signiture: Invalid marker {}".format(marker))
         s_length = der_bin[next_marker_index + 1]
         s = int.from_bytes(der_bin[next_marker_index + 2:next_marker_index + 2 + s_length], 'big')
