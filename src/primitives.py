@@ -3,6 +3,10 @@ import hashlib
 BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 
 
+SIGHASH_ALL = 1
+SIGHASH_NONE = 2
+SIGHASH_SINGLE = 3
+
 def little_endian_to_int(s):
     return int.from_bytes(s, 'little')
 
@@ -36,6 +40,19 @@ def encode_base58(s):
 def encode_base58_checksum(s):
     '''Encode in base 58 and add checksum'''
     return encode_base58(s + hash256(s)[:4])
+
+def decode_base58_checksum(address):
+    num = 0
+    for c in address:
+        num *= 58
+        num += BASE58_ALPHABET.index(c)
+    byte_address = num.to_bytes(25, 'big')
+    base_address = byte_address[1:-4]
+    given_checksum = byte_address[-4:]
+    actual_checksum = hash256(byte_address[:-4])[:4]
+    if actual_checksum != given_checksum:
+        raise ValueError("Bad address: {} {}").format(actual_checksum.hex(), given_checksum.hex())
+    return base_address
 
 def read_varint(s):
     '''Reads variable integer from a stream'''
