@@ -1,11 +1,36 @@
-
 import unittest
 import requests
 
 from io import BytesIO
 from pprint import pprint
-from script import Script, Interpreter
+from ecc import PrivateKey
+from script import Script, Interpreter, Token, T_OP_CODE, T_ELEMENT
 from primitives import *
+
+
+class TxGenerator:
+
+    @staticmethod
+    def tx_out(addr, amnt):
+        addr_hash = decode_base58_checksum(addr)
+        pubkey = TxGenerator.p2pkh_script(addr_hash)
+        return TxOut(amount=amnt, script_pubkey=pubkey)
+
+    @staticmethod
+    def p2pkh_script(addr_hash):
+        return Script([Token(value=0x76, type=T_OP_CODE),
+                        Token(value=0xa9, type=T_OP_CODE),
+                        Token(value=addr_hash, type=T_ELEMENT),
+                        Token(value=0x88, type=T_OP_CODE),
+                        Token(value=0xac, type=T_OP_CODE),])
+
+    @staticmethod
+    def p2pkh_sig(private_key, tx, input_index):
+        z = tx.sig_hash(input_index)
+        sig = private_key.sign(z).der() + SIGHASH_ALL.to_bytes(1, 'big')
+        sec = private_key.public_key().sec()
+        return Script([Token(value=sig, type=T_ELEMENT),
+                        Token(value=sec, type=T_ELEMENT)])
 
 
 class Tx:
@@ -47,16 +72,6 @@ class Tx:
     def hash(self):
         return hash256(self.serialize())[::-1]
 
-    def verify_input(self, input_index):
-        tx_in = self.tx_ins[input_index]
-        signed_tx = self.serialize(signing=True, signing_index=input_index)
-        signed_tx += int_to_little_endian(1, 4) # SIGHASH_ALL
-        z = int.from_bytes(hash256(signed_tx), 'big')
-        interpreter = Interpreter(tx_in.script_sig + tx_in.script_pubkey())
-        if interpreter.evaluate(z):
-            return True
-        return False
-
     def fee(self):
         fee = 0
         for tx_in in self.tx_ins:
@@ -64,6 +79,20 @@ class Tx:
         for tx_out in self.tx_outs:
             fee -= tx_out.amount
         return fee
+
+    def sig_hash(self, input_index):
+        # Transaction message hashed for signing
+        signed_tx = self.serialize(signing=True, signing_index=input_index)
+        signed_tx += int_to_little_endian(1, 4) # SIGHASH_ALL
+        return int.from_bytes(hash256(signed_tx), 'big')
+
+    def verify_input(self, input_index):
+        tx_in = self.tx_ins[input_index]
+        z = self.sig_hash(input_index)
+        interpreter = Interpreter(tx_in.script_sig + tx_in.script_pubkey())
+        if interpreter.evaluate(z):
+            return True
+        return False
 
     def verify(self):
         if self.fee() < 0:
@@ -75,6 +104,7 @@ class Tx:
         return True
 
     def serialize(self, signing=False, signing_index=0):
+        # Return byte serialization of tx
         serialization = int_to_little_endian(self.version, 4)
         serialization += encode_varint(len(self.tx_ins))
         for i, tx_in in enumerate(self.tx_ins):
@@ -238,8 +268,39 @@ c99c39800000000001976a9141c4bc762dd5423e332166702cb75f40df79fea1288ac19430600'''
             prev_index = 0
         tx_in = TxIn(prev_txid, prev_index, testnet=testnet)
 
+    def testPay(self):
+        utxo_id = '0d6fe5213c0b3291f208cba8bfb59b7476dffacc4e5cb66f6eb20a080843a299'
+        utxo_index = 13
+        tx_in = TxIn(utxo_id, utxo_index)
+        tx_out = TxOut()
+
 
 if __name__ == '__main__':
-    unittest.main(verbosity=2)
+    # Create initial tx_in from utxo (unsigned)
+    utxo_id = '0d6fe5213c0b3291f208cba8bfb59b7476dffacc4e5cb66f6eb20a080843a299'
+    utxo_index = 13
+    tx_in = TxIn(bytes.fromhex(utxo_id), utxo_index, testnet=True)
+    input_amnt = int(tx_in.amount())
+    # Create p2pkh output transactions
+    target_addr = 'mnrVtF8DWjMu839VW3rBfgYaAfKk8983Xf'
+    target_amnt = int(0.33*1e8)
+    target_tx_out = TxGenerator.tx_out(target_addr, target_amnt)
+    fee = int(0.01*1e8)
+    return_addr = 'mzx5YhAH9kNHtcN481u6WkjeHjYtVeKVh2'
+    return_amnt = int(input_amnt - target_amnt - fee)
+    return_tx_out = TxGenerator.tx_out(return_addr, return_amnt)
+    # Create unsigned transaction
+    tx = Tx(version=1, tx_ins=[tx_in], tx_outs=[return_tx_out, target_tx_out], locktime=0, testnet=True)
+    # tx = Tx(version=1, tx_ins=[tx_in], tx_outs=[target_tx_out, return_tx_out], locktime=0, testnet=True)
+    # Retrieve private key corresponding to utxo pubkey and sign input
+    private_key = PrivateKey(8675309)
+    tx.tx_ins[0].script_sig = TxGenerator.p2pkh_sig(private_key, tx, 0)
+    print(tx.serialize().hex())
+    print()
+    want = '010000000199a24308080ab26e6fb65c4eccfadf76749bb5bfa8cb08f291320b3c21e56f0d0d0000006b4830450221008ed46aa2cf12d6d81065bfabe903670165b538f65ee9a3385e6327d80c66d3b502203124f804410527497329ec4715e18558082d489b218677bd029e7fa306a72236012103935581e52c354cd2f484fe8ed83af7a3097005b2f9c60bff71d35bd795f54b67ffffffff02408af701000000001976a914d52ad7ca9b3d096a38e752c2018e6fbc40cdf26f88ac80969800000000001976a914507b27411ccf7f16f10297de6cef3f291623eddf88ac00000000'
+    print(want)
+    
+    
+    
     
 
