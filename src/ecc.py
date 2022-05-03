@@ -1,4 +1,5 @@
 import unittest
+import hmac
 
 from primitives import *
 
@@ -179,7 +180,7 @@ class secp256k1Point(ECPoint):
     def hash160(self, compressed=True):
         return hash160(self.sec(compressed))
 
-    def sec(self, compressed):
+    def sec(self, compressed=True):
         # Serialize public key in SEC format
         if compressed:
             if self.y.num % 2 == 0:
@@ -288,7 +289,7 @@ class PrivateKey:
 
     def sign(self, z):
         '''Sign message hash'''
-        k = 123456789
+        k = self.deterministic_k(z)
         k_inv = pow(k, secp256k1_N-2, secp256k1_N)
         R = (k*secp256k1_G)
         r = R.x.num
@@ -296,6 +297,26 @@ class PrivateKey:
         if s > secp256k1_N / 2:
             s = secp256k1_N - s
         return Signiture(r, s)
+
+    def deterministic_k(self, z):
+        k = b'\x00' * 32
+        v = b'\x01' * 32
+        if z > secp256k1_N:
+            z -= secp256k1_N
+        z_bytes = z.to_bytes(32, 'big')
+        secret_bytes = self.key.to_bytes(32, 'big')
+        s256 = hashlib.sha256
+        k = hmac.new(k, v + b'\x00' + secret_bytes + z_bytes, s256).digest()
+        v = hmac.new(k, v, s256).digest()
+        k = hmac.new(k, v + b'\x01' + secret_bytes + z_bytes, s256).digest()
+        v = hmac.new(k, v, s256).digest()
+        while True:
+            v = hmac.new(k, v, s256).digest()
+            candidate = int.from_bytes(v, 'big')
+            if candidate >= 1 and candidate < secp256k1_N:
+                return candidate
+            k = hmac.new(k, v + b'\x00', s256).digest()
+            v = hmac.new(k, v, s256).digest()
 
     def wif(self, compressed=True, testnet=False):
         '''Encode private key in WIF format'''
@@ -307,9 +328,7 @@ class PrivateKey:
             suffix = b'\x01'
         else:
             suffix = b''
-        return encode_base58_checksum(prefix + self.key.to_bytes(32, 'big') + suffix)
-        
-
+        return encode_base58_checksum(prefix + self.key.to_bytes(32, 'big') + suffix) 
 
 
 class FFETests(unittest.TestCase):
